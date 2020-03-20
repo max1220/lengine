@@ -55,9 +55,8 @@ local function run(state)
 		try_callback("on_mouse_position", window, x, y)
 	end
 
-	local function reshape_callback(win, ...)
-		print("reshape", win)
-		print("", "arg:", ...)
+	local function reshape_callback(window, width, height)
+		try_callback("on_reshape", window, width, height)
 	end
 
 	-- create a glfw window, setup callbacks for input events, setup opengl
