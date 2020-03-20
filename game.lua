@@ -51,6 +51,7 @@ function game:new_static_object(vertices, colors, normals, tex_cords, model_matr
 
 	function object.update_buffer(_self)
 		assert((#_self.vertices == #_self.colors) and (#_self.vertices == #_self.normals) and (#_self.vertices == #_self.tex_cords))
+		object.vertices_len = #vertices
 
 		gl.bind_buffer("array", _self.vbo)
 		local buffer_size = #_self.vertices*vec4_s + #_self.colors*vec4_s + #_self.normals*vec3_s + #_self.tex_cords*vec2_s
@@ -166,8 +167,6 @@ function game:new_cube(colors, texCoords, model_matrix)
 	return cube_obj
 end
 
-
-
 function game:new_test()
 	local scene = assimp.import_file("assets/teapot.obj", 'triangulate', 'gen smooth normals')
 	local mesh = scene:meshes()[1]
@@ -194,6 +193,9 @@ function game:new_test()
 	local obj = self:new_static_object(vertices, colors, normals, tex_cords, mat4())
 	return obj
 end
+
+
+
 
 function game:add_uniform(uniform_name)
 	local uniform_loc = gl.get_uniform_location(self.program, uniform_name)
@@ -265,23 +267,29 @@ function game:load_texture(filepath)
 	return texture_id
 end
 
-function game:update_chunks()
+function game:update_objects()
 	local chunk_ox = math.floor((-self.camera.position.x/self.chunk_w)+0.5)
 	local chunk_oz = math.floor((-self.camera.position.z/self.chunk_d)+0.5)
 
-	self.objects = {}
+	self.objects = { self.teapot }
 
 	local view_dist = self.view_dist
 	for x=-view_dist, view_dist do
 		for z=-view_dist, view_dist do
 			local chunk = self.chunk_manager:get_chunk(chunk_ox+x,0,chunk_oz+z)
-			if not chunk.object then
-				chunk.object = self:new_chunk_object(chunk.data, self.cube_tileset)
-				chunk.object.model_matrix = glmath.translate(chunk.x*self.chunk_w, chunk.y*self.chunk_h, chunk.z*self.chunk_d)
-			end
 			table.insert(self.objects, chunk.object)
 		end
 	end
+end
+
+
+
+function game:on_reshape(_, width, height)
+	self.width = width
+	self.height = height
+	self.camera.ar = width/height
+	self:update_camera()
+	gl.viewport(0, 0, width, height)
 end
 
 function game:on_mouse_position(_, x, y)
@@ -333,13 +341,11 @@ end
 function game:on_update(dt)
 	self.time = self.time + dt
 
-	local light_pos = vec3(0,(math.sin(self.time*3)+2),0)
-	--local cube = self.objects[1]
-	--cube.model_matrix = glmath.translate(light_pos)*glmath.scale(0.1)
+	local light_pos = vec3(0,math.sin(self.time*3)+16,0)
 
 	gl.uniform(self.uniforms.light_pos, "float", light_pos.x, light_pos.y, light_pos.z)
 	gl.uniform(self.uniforms.light_color, "float", 1,0,0)
-	gl.uniform(self.uniforms.ambient_color, "float", 0.15,0.15,0.15)
+	gl.uniform(self.uniforms.ambient_color, "float", 0.7,0.7,0.7)
 
 	local speed = 3
 	if self.keyboard["left shift"] then
@@ -366,7 +372,7 @@ function game:on_update(dt)
 		self.camera.position.y = self.camera.position.y + speed*dt
 	end
 
-	self:update_chunks()
+	self:update_objects()
 
 	local sensitivity = 0.1
 	if self.mouse.left or self.mouse.capture then
@@ -378,18 +384,17 @@ function game:on_update(dt)
 
 
 	self:update_camera()
-	--local d = (math.sin(self.time*0.443344+12312)+1)*1.5
-	--local x = math.sin(self.time*0.5)*d+0.5
+	--local d = (math.sin(self.time*0.443344+12312)+1)*8.5
+	--local x = math.sin(self.time*0.5)*d+5.5
 	--local y = math.cos(self.time*0.5)*d
-	--self.view_matrix = glmath.look_at(vec3(x,2,y), vec3(0,1,0), vec3(0,1,0))
-	--self.view_matrix = glmath.look_at(vec3(1,1,1), vec3(0,0.5,0), vec3(0,1,0))
+	--self.view_matrix = glmath.look_at(vec3(x,16,y), vec3(0,1,0), vec3(0,1,0))
 
 	--print("fps:",1/dt,"dt",dt)
-	local vertice_count = 0
-	for _, obj in ipairs(self.objects) do
-		vertice_count = vertice_count + #obj.vertices
-	end
-	print("vertice_count", vertice_count)
+	--local vertice_count = 0
+	--for _, obj in ipairs(self.objects) do
+	--	vertice_count = vertice_count + #obj.vertices
+	--end
+	--print("vertice_count", vertice_count)
 end
 
 function game:on_init(window)
@@ -398,7 +403,7 @@ function game:on_init(window)
 	self.window = window
 	self.time = 0
 	self.view_dist = 1
-	self.chunk_w, self.chunk_h, self.chunk_d = 32,16,32
+	self.chunk_w, self.chunk_h, self.chunk_d = 16,16,16
 
 	self.camera = {
 		fov = 90,
@@ -442,11 +447,13 @@ function game:on_init(window)
 	gl.front_face("cw")
 
 	-- set background color
-	gl.clear_color(0,0,0,0)
+	gl.clear_color(0.75,0.85,1,0)
 
 	random:seed()
 
 
+	self.teapot = self:new_test()
+	self.teapot.model_matrix = glmath.translate(5,8,0) * glmath.scale(2)
 
 	self.objects = {}
 
@@ -457,71 +464,13 @@ function game:on_init(window)
 		}
 	})
 
-	local white_cube_colors = {}
-	local texture_cube_colors = {}
-	for i=1, 36 do
-		white_cube_colors[i] = vec4(1,1,1,1)
-		texture_cube_colors[i] = vec4(1,1,1,0)
-	end
-
-	--local light_cube = self:new_cube(white_cube_colors)
-	--table.insert(self.objects, light_cube)
-
-	self.chunk_manager = chunk_manager(self.chunk_w, self.chunk_h, self.chunk_d)
+	self.chunk_manager = chunk_manager(self)
 	self.chunk_generator = chunk_generator(self.chunk_w, self.chunk_h, self.chunk_d)
 	function self.chunk_manager.on_chunk_missing(_self, chunk_x, chunk_y, chunk_z)
 		print("generating chunk", chunk_x, chunk_y, chunk_z)
 		local chunk = self.chunk_generator(chunk_x, chunk_y, chunk_z)
 		_self:add_chunk(chunk)
 		return chunk
-	end
-
-	--local obj = self:new_test()
-	--obj.model_matrix = glmath.translate(0,0.5,0)*glmath.scale(0.2)
-	--table.insert(self.objects, obj)
-
-
-
-	local d = 0
-	for i=1, d do
-		local cube = self:new_cube(white_cube_colors)
-		cube.model_matrix = glmath.translate(i,0,0)
-		table.insert(self.objects, cube)
-
-		cube = self:new_cube(white_cube_colors)
-		cube.model_matrix = glmath.translate(0,0,i)
-		table.insert(self.objects, cube)
-
-		cube = self:new_cube(white_cube_colors)
-		cube.model_matrix = glmath.translate(-i,0,0)
-		table.insert(self.objects, cube)
-
-		cube = self:new_cube(white_cube_colors)
-		cube.model_matrix = glmath.translate(0,-i,0)
-		table.insert(self.objects, cube)
-
-		cube = self:new_cube(white_cube_colors)
-		cube.model_matrix = glmath.translate(0,0,-i)
-		table.insert(self.objects, cube)
-	end
-	for y=1, d do
-		for x=1, d do
-			local cube = self:new_cube(texture_cube_colors, self.cube_tileset[4])
-			cube.model_matrix = glmath.translate(x,(x-1)+(y-1)+0.1,y)
-			table.insert(self.objects, cube)
-
-			cube = self:new_cube(texture_cube_colors, self.cube_tileset[3])
-			cube.model_matrix = glmath.translate(-x,0.1,y)
-			table.insert(self.objects, cube)
-
-			cube = self:new_cube(texture_cube_colors, self.cube_tileset[2])
-			cube.model_matrix = glmath.translate(x,0.1,-y)
-			table.insert(self.objects, cube)
-
-			cube = self:new_cube(texture_cube_colors, self.cube_tileset[4])
-			cube.model_matrix = glmath.translate(-x,0.1,-y)
-			table.insert(self.objects, cube)
-		end
 	end
 end
 
