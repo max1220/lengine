@@ -1,9 +1,6 @@
 #!/usr/bin/env lua5.3
 local gl = require("moongl")
 local glfw = require("moonglfw")
-local glmath = require("moonglmath")
-local utils = require("utils")
-local time = require("time")
 
 
 local function run(state)
